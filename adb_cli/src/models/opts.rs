@@ -2,12 +2,10 @@ use std::net::SocketAddrV4;
 
 use clap::{Parser, Subcommand};
 
-use crate::utils;
-
 use super::{EmulatorCommand, HostCommand, LocalCommand, TcpCommand, UsbCommand};
 
 #[derive(Debug, Parser)]
-#[clap(about, long_version = utils::long_version(), author)]
+#[clap(about, version)]
 pub struct Opts {
     #[clap(long = "debug")]
     pub debug: bool,
@@ -29,8 +27,6 @@ pub enum MainCommand {
     Tcp(TcpCommand),
     /// MDNS discovery related commands
     Mdns,
-    /// Display various version information
-    Version,
 }
 
 #[derive(Debug, Parser)]
