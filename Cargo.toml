@@ -12,12 +12,11 @@ repository = "https://github.com/cocool97/adb_client"
 version = "3.2.2"
 rust-version = "1.88.0"
 
-# To build locally when working on a new release
+# To build locally when working on new features
 [patch.crates-io]
 adb_client = { path = "./adb_client" }
 
 [workspace.lints.clippy]
-pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 
 [profile.release]

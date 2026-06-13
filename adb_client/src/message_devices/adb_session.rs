@@ -26,6 +26,7 @@ pub struct ADBSession<T: ADBMessageTransport> {
 }
 
 impl<T: ADBMessageTransport> ADBSession<T> {
+    /// Create a new session with the given transport and IDs.
     pub const fn new(transport: T, local_id: u32, remote_id: u32) -> Self {
         Self {
             transport,

@@ -4,27 +4,47 @@ use crate::RebootType;
 
 /// ADB commands that relates to an actual device.
 pub enum ADBLocalCommand {
+    /// Run a shell command with arguments
     ShellCommand(String, Vec<String>),
+    /// Open an interactive shell session
     Shell,
+    /// Execute a command without PTY allocation
     Exec(String),
+    /// Start a sync session for file operations
     Sync,
+    /// Reboot the device
     Reboot(RebootType),
+    /// Set up port forwarding (remote, local)
     Forward(String, String),
+    /// Remove a specific port forward
     ForwardRemove(String),
+    /// Remove all port forwards
     ForwardRemoveAll,
+    /// Set up reverse port forwarding (remote, local)
     Reverse(String, String),
+    /// Remove a specific reverse forward
     ReverseRemove(String),
+    /// Remove all reverse forwards
     ReverseRemoveAll,
+    /// Reconnect to the device
     Reconnect,
+    /// Remount the filesystem as read-write
     Remount,
+    /// Disable dm-verity checking on userdebug builds
     DisableVerity,
+    /// Re-enable dm-verity checking on userdebug builds
     EnableVerity,
+    /// Uninstall a package, optionally for a specific user
     Uninstall(String, Option<String>),
+    /// Install a package with the given size, optionally for a specific user
     Install(u64, Option<String>),
+    /// Switch the device to TCP/IP mode on the given port
     TcpIp(u16),
+    /// Switch the device back to USB mode
     Usb,
+    /// Restart adbd with root permissions
     Root,
-
+    /// Capture the device framebuffer
     #[cfg(feature = "framebuffer")]
     FrameBuffer,
 }
@@ -91,16 +111,19 @@ impl Display for ADBLocalCommand {
     }
 }
 
-#[test]
-fn test_forward_remove_command() {
-    let command = ADBLocalCommand::ForwardRemove("tcp:7100".to_string());
+#[cfg(test)]
+mod tests {
+    use crate::models::ADBLocalCommand;
 
-    assert_eq!(command.to_string(), "host:killforward:tcp:7100");
-}
+    #[test]
+    fn test_forward_remove_command() {
+        let command = ADBLocalCommand::ForwardRemove("tcp:7100".to_string());
+        assert_eq!(command.to_string(), "host:killforward:tcp:7100");
+    }
 
-#[test]
-fn test_reverse_remove_command() {
-    let command = ADBLocalCommand::ReverseRemove("tcp:7100".to_string());
-
-    assert_eq!(command.to_string(), "reverse:killforward:tcp:7100");
+    #[test]
+    fn test_reverse_remove_command() {
+        let command = ADBLocalCommand::ReverseRemove("tcp:7100".to_string());
+        assert_eq!(command.to_string(), "reverse:killforward:tcp:7100");
+    }
 }

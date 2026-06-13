@@ -143,9 +143,13 @@ fn set_bit(n: usize) -> Result<BigUint> {
     .ok_or(RustADBError::ConversionError)
 }
 
-#[test]
-fn test_pubkey_gen() {
-    const DEFAULT_PRIV_KEY: &str = r"-----BEGIN PRIVATE KEY-----
+#[cfg(test)]
+mod tests {
+    use crate::message_devices::models::ADBRsaKey;
+
+    #[test]
+    fn test_pubkey_gen() {
+        const DEFAULT_PRIV_KEY: &str = r"-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC4Dyn85cxDJnjM
 uYXQl/w469MDKdlGdviLfmFMWeYLVfL2Mz1AVyvKqscrtlhbbgMQ/M+3lDvEdHS0
 14RIGAwWRtrlTTmhLvM2/IO+eSKSYeCrCVc4KLG3E3WRryUXbs2ynA29xjTJVw+Z
@@ -173,23 +177,26 @@ xGDK/moPvzs0CjdPlRcEN+Myy/G0FUrOaC0FcpNoJOdQSYz3F6URA4nX+zj6Ie7G
 CNkECiepaGyquQaffwR1CAi8dH6biJjlTQWQPFcCLA0hvernWo3eaSfiL7fHyym+
 ile69MHFENUePSpuRSiF3Z02
 -----END PRIVATE KEY-----";
-    let priv_key =
-        ADBRsaKey::new_from_pkcs8(DEFAULT_PRIV_KEY).expect("cannot create rsa key from data");
-    let pub_key = priv_key
-        .android_pubkey_encode()
-        .expect("cannot encode public key");
-    let pub_key_adb = "\
-QAAAAFH/pU9PVrHRgEjMGnpvOr2QzKYCavSE1fcSwvpS1uPn9GTmuyZr7c9up\
-MBpSrrlFYpsjBQ7IfAyZIsVsffr5doEG5StKN8FwaO+sEX9YZX9Sr2m7/eVi0\
-17Dcinn0bZNKekAGahzTvyg0hieawXTthqTztSsV3cGY4xBsv/FLx2woyv7bT\
-xHLUOdyTI4b+4ycjEgwHtf8pDjMWZD1fJNMa9DZyyzW4XJa+RdRO3sSg4Vwmr\
-4GGSInm+g/w28y6hOU3l2kYWDBhIhNe0dHTEO5S3z/wQA25bWLYrx6rKK1dAP\
-TP28lUL5llMYX6L+HZG2SkD0+s4/JfQhbnMeCZDzOX8KQ+4ThLy/gDTqCSTjj\
-ic8BykdUIqYPwAjBMgQwLOLY5WNJMpjGlFINRcCGhvFFZ73sJTLerECuV/Oae\
-nFRcORwnGIRgMrYXj4tjmxJC7sq3cfNX96YIcSCDE9SZFdlKXVK8Jc4YMLGF3\
-MI8k1KoTby34uaIyxPJvwM1WR4Rdj60fwMyikFXNaOR2fPteZ3UMBA7CMrOEm\
-9iYjntyEppA4hQXIO1TWTzkA/Kfl1i67k5NuLIQdhPFEc5ox5IYVHusauPQ7d\
-Awu6BlgK37TUn0JdK0Z6Z4RaEIaNiEI0d5CoP6zQKV2QQnlscYpdsaUW5t9/F\
-LioVXPwrz0tx35JyIUZPPYwEAAQA= ";
-    assert_eq!(&pub_key[..pub_key_adb.len()], pub_key_adb);
+
+        let priv_key =
+            ADBRsaKey::new_from_pkcs8(DEFAULT_PRIV_KEY).expect("cannot create rsa key from data");
+        let pub_key = priv_key
+            .android_pubkey_encode()
+            .expect("cannot encode public key");
+
+        let pub_key_adb = "\
+    QAAAAFH/pU9PVrHRgEjMGnpvOr2QzKYCavSE1fcSwvpS1uPn9GTmuyZr7c9up\
+    MBpSrrlFYpsjBQ7IfAyZIsVsffr5doEG5StKN8FwaO+sEX9YZX9Sr2m7/eVi0\
+    17Dcinn0bZNKekAGahzTvyg0hieawXTthqTztSsV3cGY4xBsv/FLx2woyv7bT\
+    xHLUOdyTI4b+4ycjEgwHtf8pDjMWZD1fJNMa9DZyyzW4XJa+RdRO3sSg4Vwmr\
+    4GGSInm+g/w28y6hOU3l2kYWDBhIhNe0dHTEO5S3z/wQA25bWLYrx6rKK1dAP\
+    TP28lUL5llMYX6L+HZG2SkD0+s4/JfQhbnMeCZDzOX8KQ+4ThLy/gDTqCSTjj\
+    ic8BykdUIqYPwAjBMgQwLOLY5WNJMpjGlFINRcCGhvFFZ73sJTLerECuV/Oae\
+    nFRcORwnGIRgMrYXj4tjmxJC7sq3cfNX96YIcSCDE9SZFdlKXVK8Jc4YMLGF3\
+    MI8k1KoTby34uaIyxPJvwM1WR4Rdj60fwMyikFXNaOR2fPteZ3UMBA7CMrOEm\
+    9iYjntyEppA4hQXIO1TWTzkA/Kfl1i67k5NuLIQdhPFEc5ox5IYVHusauPQ7d\
+    Awu6BlgK37TUn0JdK0Z6Z4RaEIaNiEI0d5CoP6zQKV2QQnlscYpdsaUW5t9/F\
+    LioVXPwrz0tx35JyIUZPPYwEAAQA= ";
+        assert_eq!(&pub_key[..pub_key_adb.len()], pub_key_adb);
+    }
 }
