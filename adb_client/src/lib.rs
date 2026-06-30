@@ -18,6 +18,15 @@ mod error;
 mod message_devices;
 mod models;
 
+/// Stream-based transport for ADB protocol (yamux-backed).
+pub mod stream_transport;
+
+/// ADB device over a generic byte stream.
+pub mod stream_device;
+
+/// ADB server over a generic byte stream.
+pub mod stream_server;
+
 /// Server-related definitions
 pub mod server;
 

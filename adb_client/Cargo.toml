@@ -43,6 +43,7 @@ rustls = { version = "0.23.40", default-features = false, features = ["ring", "s
 rustls-pki-types = { version = "1.14.1" }
 sha1 = { version = "0.10.6", features = ["oid"] }
 thiserror = { version = "2.0.18" }
+parking_lot = { version = "0.12" }
 
 #########
 # `mdns` feature-specific dependencies

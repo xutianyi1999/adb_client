@@ -20,6 +20,7 @@ pub enum ADBHostCommand {
     MDNSServices,
     ServerStatus,
     ReconnectOffline,
+    ListForward,
     WaitForDevice(WaitForDeviceState, WaitForDeviceTransport),
 }
 
@@ -49,6 +50,7 @@ impl Display for ADBHostCommand {
                     "host:wait-for-{wait_for_device_transport}-{wait_for_device_state}"
                 )
             }
+            Self::ListForward => write!(f, "host:list-forward"),
             Self::HostFeatures => write!(f, "host:features"),
         }
     }
