@@ -15,11 +15,18 @@ use crate::{
 
 const BUFFER_SIZE: usize = 65535;
 
+/// Opens a new byte stream (yamux, TCP, etc.) for each device command.
+/// Mirrors the original ADB client which opens a fresh TCP connection per call.
+pub trait StreamOpener: Send + Sync {
+    /// Open a new stream. Called before every `host:transport:...` command.
+    fn open(&self) -> std::result::Result<Box<dyn ReadWrite>, String>;
+}
+
 /// ADB device communicating over a generic byte stream (yamux, etc.).
 pub struct ADBStreamDevice {
     identifier: Option<String>,
     transport_id: Option<u32>,
-    transport: StreamTransport,
+    opener: Box<dyn StreamOpener>,
 }
 
 impl std::fmt::Debug for ADBStreamDevice {
@@ -33,17 +40,21 @@ impl std::fmt::Debug for ADBStreamDevice {
 
 impl ADBStreamDevice {
     /// Create a new stream-backed ADB device.
-    pub fn new(serial: String, stream: Box<dyn ReadWrite>) -> Self {
-        let mut transport = StreamTransport::new();
-        transport.connect(stream);
+    pub fn new(serial: String, opener: Box<dyn StreamOpener>) -> Self {
         Self {
             identifier: Some(serial),
             transport_id: None,
-            transport,
+            opener,
         }
     }
 
-    fn set_serial_transport(&self) -> Result<()> {
+    /// Open a fresh transport and select the device with `host:transport:...`.
+    fn open_transport(&self) -> Result<StreamTransport> {
+        let stream = self.opener.open()
+            .map_err(|e| RustADBError::IOError(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let mut transport = StreamTransport::new();
+        transport.connect(stream);
+
         let cmd = if let Some(id) = self.transport_id {
             ADBHostCommand::TransportId(id)
         } else if let Some(serial) = self.identifier.clone() {
@@ -51,7 +62,8 @@ impl ADBStreamDevice {
         } else {
             ADBHostCommand::TransportAny
         };
-        self.transport.send_adb_request(&ADBCommand::Host(cmd))
+        transport.send_adb_request(&ADBCommand::Host(cmd))?;
+        Ok(transport)
     }
 }
 
@@ -63,11 +75,9 @@ impl ADBDeviceExt for ADBStreamDevice {
         stderr: Option<&mut dyn Write>,
     ) -> Result<Option<u8>> {
         let supported_features = self.host_features();
-        let use_shell_v2 = supported_features.is_ok_and(|features| {
+        let use_shell_v2 = supported_features.as_ref().is_ok_and(|features| {
             features.contains(&HostFeatures::ShellV2) || features.contains(&HostFeatures::Cmd)
         });
-
-        self.set_serial_transport()?;
 
         if use_shell_v2 {
             self.shell_command_v2(command, stdout, stderr)
@@ -98,14 +108,10 @@ impl ADBDeviceExt for ADBStreamDevice {
     }
 
     fn push(&mut self, stream: &mut dyn Read, path: &dyn AsRef<str>) -> Result<()> {
-        log::info!("Sending data to {}", path.as_ref());
-        self.set_serial_transport()?;
-
-        self.transport
-            .send_adb_request(&ADBCommand::Local(ADBLocalCommand::Sync))?;
-        self.transport.send_sync_request(&SyncCommand::Send)?;
-
-        self.handle_send_command(stream, path)
+        let transport = self.open_transport()?;
+        transport.send_adb_request(&ADBCommand::Local(ADBLocalCommand::Sync))?;
+        transport.send_sync_request(&SyncCommand::Send)?;
+        self.handle_send_command(&transport, stream, path)
     }
 
     fn list(&mut self, _path: &dyn AsRef<str>) -> Result<Vec<crate::models::ADBListItemType>> {
@@ -150,9 +156,8 @@ impl ADBDeviceExt for ADBStreamDevice {
 
 impl ADBStreamDevice {
     fn host_features(&self) -> Result<Vec<HostFeatures>> {
-        self.set_serial_transport()?;
-        let features = self
-            .transport
+        let transport = self.open_transport()?;
+        let features = transport
             .proxy_connection(&ADBCommand::Host(ADBHostCommand::HostFeatures), true)?;
         Ok(features
             .split(|x| x.eq(&b','))
@@ -162,8 +167,8 @@ impl ADBStreamDevice {
 
     /// Forward socket connection.
     pub fn forward(&self, remote: String, local: String) -> Result<()> {
-        self.set_serial_transport()?;
-        self.transport
+        let transport = self.open_transport()?;
+        transport
             .proxy_connection(
                 &ADBCommand::Local(ADBLocalCommand::Forward(remote, local)),
                 false,
@@ -173,8 +178,8 @@ impl ADBStreamDevice {
 
     /// Remove a previously applied forward rule by its local endpoint.
     pub fn forward_remove(&self, local: String) -> Result<()> {
-        self.set_serial_transport()?;
-        self.transport
+        let transport = self.open_transport()?;
+        transport
             .proxy_connection(
                 &ADBCommand::Local(ADBLocalCommand::ForwardRemove(local)),
                 false,
@@ -184,17 +189,16 @@ impl ADBStreamDevice {
 
     /// List all port forwards.
     pub fn forward_list(&self) -> Result<String> {
-        self.set_serial_transport()?;
-        let raw = self
-            .transport
+        let transport = self.open_transport()?;
+        let raw = transport
             .proxy_connection(&ADBCommand::Host(ADBHostCommand::ListForward), true)?;
         String::from_utf8(raw).map_err(|e| RustADBError::IOError(std::io::Error::other(e)))
     }
 
     /// Remove all previously applied forward rules.
     pub fn forward_remove_all(&self) -> Result<()> {
-        self.set_serial_transport()?;
-        self.transport
+        let transport = self.open_transport()?;
+        transport
             .proxy_connection(&ADBCommand::Local(ADBLocalCommand::ForwardRemoveAll), false)
             .map(|_| ())
     }
@@ -204,12 +208,13 @@ impl ADBStreamDevice {
         command: &dyn AsRef<str>,
         mut stdout: Option<&mut dyn Write>,
     ) -> Result<Option<u8>> {
-        self.transport.send_adb_request(&ADBCommand::Local(
+        let transport = self.open_transport()?;
+        transport.send_adb_request(&ADBCommand::Local(
             ADBLocalCommand::ShellCommand(command.as_ref().to_string(), vec![]),
         ))?;
 
         let mut buffer = vec![0; BUFFER_SIZE].into_boxed_slice();
-        let mut guard = self.transport.lock()?;
+        let mut guard = transport.lock()?;
         let stream: &mut dyn Read = &mut *guard;
         loop {
             let n = match stream.read(&mut buffer) {
@@ -238,7 +243,8 @@ impl ADBStreamDevice {
             args.push(format!("TERM={term}"));
         }
 
-        self.transport.send_adb_request(&ADBCommand::Local(
+        let transport = self.open_transport()?;
+        transport.send_adb_request(&ADBCommand::Local(
             ADBLocalCommand::ShellCommand(command.as_ref().to_string(), args),
         ))?;
 
@@ -265,7 +271,7 @@ impl ADBStreamDevice {
         }
 
         let mut exit = None;
-        let mut guard = self.transport.lock()?;
+        let mut guard = transport.lock()?;
         let stream: &mut dyn Read = &mut *guard;
         let mut input = std::io::BufReader::new(stream);
         let mut buffer = vec![0; BUFFER_SIZE].into_boxed_slice();
@@ -340,7 +346,12 @@ impl ADBStreamDevice {
         }
     }
 
-    fn handle_send_command<S: AsRef<str>>(&self, mut input: impl Read, to: S) -> Result<()> {
+    fn handle_send_command<S: AsRef<str>>(
+        &self,
+        transport: &StreamTransport,
+        mut input: impl Read,
+        to: S,
+    ) -> Result<()> {
         let to = to.as_ref().to_string() + ",0777";
         let to_as_bytes = to.as_bytes();
 
@@ -348,7 +359,7 @@ impl ADBStreamDevice {
         buffer.extend_from_slice(&(u32::try_from(to.len()).unwrap_or(0)).to_le_bytes());
         buffer.extend_from_slice(to_as_bytes);
 
-        let mut stream = self.transport.lock()?;
+        let mut stream = transport.lock()?;
         stream.write_all(&buffer)?;
 
         struct SendWriter<'a>(&'a mut dyn Write);
@@ -382,13 +393,13 @@ impl ADBStreamDevice {
         let mut done_buffer = Vec::with_capacity(8);
         done_buffer.extend_from_slice(b"DONE");
         done_buffer.extend_from_slice(&last_modified.as_secs().to_le_bytes());
-        self.transport.lock()?.write_all(&done_buffer)?;
+        transport.lock()?.write_all(&done_buffer)?;
 
         let mut request_status = [0; 4];
-        self.transport.lock()?.read_exact(&mut request_status)?;
+        transport.lock()?.read_exact(&mut request_status)?;
         match AdbRequestStatus::from_str(std::str::from_utf8(&request_status)?)? {
             AdbRequestStatus::Fail => {
-                let length = self.transport.get_body_length()?;
+                let length = transport.get_body_length()?;
                 let mut body = vec![
                     0;
                     length
@@ -396,7 +407,7 @@ impl ADBStreamDevice {
                         .map_err(|_| RustADBError::ConversionError)?
                 ];
                 if length > 0 {
-                    self.transport.lock()?.read_exact(&mut body)?;
+                    transport.lock()?.read_exact(&mut body)?;
                 }
                 Err(RustADBError::ADBRequestFailed(String::from_utf8(body)?))
             }
